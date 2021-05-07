@@ -13,9 +13,7 @@ object Http4sProxy {
     def withDestination(destination: Uri): Request[F] =
       request
         .withUri(destination)
-        .putHeaders(Host.parse(
-          destination.host.map(_.value).getOrElse("") + destination.port.map(":" + _).getOrElse("")
-        ).toTry.get)
+        .putHeaders(Host(destination.authority.map(_.host.value).getOrElse(""), destination.port))
   }
 
   implicit class ResponseCompanionOps(val self: Response.type) extends AnyVal {
