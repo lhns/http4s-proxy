@@ -1,7 +1,7 @@
 package de.lolhens.http4s.proxy
 
 import cats.Monad
-import cats.effect.{BracketThrow, Resource}
+import cats.effect.{MonadCancelThrow, Resource}
 import cats.syntax.apply._
 import cats.syntax.functor._
 import fs2.Stream
@@ -17,7 +17,7 @@ object Http4sProxy {
   }
 
   implicit class ResponseCompanionOps(val self: Response.type) extends AnyVal {
-    def liftResource[F[_] : BracketThrow](resource: Resource[F, Response[F]]): F[Response[F]] =
+    def liftResource[F[_] : MonadCancelThrow](resource: Resource[F, Response[F]]): F[Response[F]] =
       resource.allocated.map {
         case (response, release) =>
           response.withBodyStream(
