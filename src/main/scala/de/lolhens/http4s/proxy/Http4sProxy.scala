@@ -28,4 +28,11 @@ object Http4sProxy {
           )
       }
   }
+
+  implicit class UriOps(val uri: Uri) extends AnyVal {
+    def withSchemeAndAuthority(uri: Uri): Uri = this.uri.copy(
+      scheme = uri.scheme,
+      authority = uri.authority
+    )
+  }
 }
