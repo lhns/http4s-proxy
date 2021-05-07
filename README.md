@@ -10,7 +10,7 @@ Utilities to create proxies in http4s
 ### build.sbt
 
 ```sbt
-libraryDependencies += "de.lolhens" %% "http4s-proxy" % "0.1.0"
+libraryDependencies += "de.lolhens" %% "http4s-proxy" % "0.1.1"
 ```
 
 ## License
