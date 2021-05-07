@@ -1,0 +1,31 @@
+package de.lolhens.http4s.proxy
+
+import cats.Monad
+import cats.effect.{BracketThrow, Resource}
+import cats.syntax.apply._
+import cats.syntax.functor._
+import fs2.Stream
+import org.http4s.headers.Host
+import org.http4s.{Request, Response, Uri}
+
+object Http4sProxy {
+  implicit class RequestOps[F[_]](val request: Request[F]) extends AnyVal {
+    def withDestination(destination: Uri): Request[F] =
+      request
+        .withUri(destination)
+        .putHeaders(Host.parse(
+          destination.host.map(_.value).getOrElse("") + destination.port.map(":" + _).getOrElse("")
+        ).toTry.get)
+  }
+
+  implicit class ResponseCompanionOps(val self: Response.type) extends AnyVal {
+    def liftResource[F[_] : BracketThrow](resource: Resource[F, Response[F]]): F[Response[F]] =
+      resource.allocated.map {
+        case (response, release) =>
+          response.withBodyStream(
+            Stream.resource(Resource.make(Monad[F].unit)(_ => release)) *>
+              response.body
+          )
+      }
+  }
+}
