@@ -5,15 +5,21 @@ import cats.effect.{MonadCancelThrow, Resource}
 import cats.syntax.apply._
 import cats.syntax.functor._
 import fs2.Stream
+import org.http4s.Uri.Authority
 import org.http4s.headers.Host
 import org.http4s.{Request, Response, Uri}
 
 object Http4sProxy {
+  implicit class HostCompanionOps(val self: Host.type) extends AnyVal {
+    def fromAuthority(authority: Authority): Host =
+      Host(authority.host.value, authority.port)
+  }
+
   implicit class RequestOps[F[_]](val request: Request[F]) extends AnyVal {
     def withDestination(destination: Uri): Request[F] =
       request
         .withUri(destination)
-        .putHeaders(Host(destination.authority.map(_.host.value).getOrElse(""), destination.port))
+        .putHeaders(destination.authority.fold(Host(""))(Host.fromAuthority))
   }
 
   implicit class ResponseCompanionOps(val self: Response.type) extends AnyVal {
