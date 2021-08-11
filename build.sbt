@@ -6,8 +6,8 @@ version := {
     .getOrElse("0.0.1-SNAPSHOT")
 }
 
-scalaVersion := "2.13.5"
-crossScalaVersions := Seq("2.12.13", scalaVersion.value)
+scalaVersion := "2.13.6"
+crossScalaVersions := Seq("2.12.14", scalaVersion.value)
 
 ThisBuild / versionScheme := Some("early-semver")
 
@@ -25,7 +25,7 @@ developers := List(
 )
 
 libraryDependencies ++= Seq(
-  "org.http4s" %% "http4s-core" % "0.21.22",
+  "org.http4s" %% "http4s-core" % "0.23.1",
 )
 
 addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
