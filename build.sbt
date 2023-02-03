@@ -81,7 +81,6 @@ lazy val commonSettings: SettingsDefinition = Def.settings(
   }
 )
 
-
 lazy val root: Project =
   project
     .in(file("."))
