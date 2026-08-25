@@ -100,6 +100,12 @@ lazy val core = projectMatrix.in(file("core"))
       // cannot link, so every published _sjs1 artifact up to 0.4.1 was unusable. There were no
       // tests to catch it.
       "org.http4s" %%% "http4s-core" % V.http4s,
+      "org.http4s" %%% "http4s-client" % V.http4s,
+      // kernel + std, never cats-effect core: this library is effect-polymorphic and must not
+      // force the IO runtime on consumers.
+      "org.typelevel" %%% "cats-effect-kernel" % V.catsEffect,
+      "org.typelevel" %%% "cats-effect-std" % V.catsEffect,
+      "co.fs2" %%% "fs2-core" % V.fs2,
     ),
   )
   // http4s-jdk-http-client is JVM only, so the integration tests that use it live in
@@ -110,11 +116,6 @@ lazy val core = projectMatrix.in(file("core"))
     scalaVersions,
     Seq(
       libraryDependencies ++= Seq(
-        // TEMPORARY: ProxyApp is JVM-only and IO-hardcoded in this commit, so it needs the IO
-        // runtime at compile scope. The next commit generalizes it to F[_] and moves both of
-        // these to the shared, cross-built scope as cats-effect-kernel and -std.
-        "org.typelevel" %% "cats-effect" % V.catsEffect,
-        "org.http4s" %% "http4s-client" % V.http4s,
         "ch.qos.logback" % "logback-classic" % V.logbackClassic % Test,
         "org.http4s" %% "http4s-dsl" % V.http4sTest % Test,
         "org.http4s" %% "http4s-ember-server" % V.http4sTest % Test,

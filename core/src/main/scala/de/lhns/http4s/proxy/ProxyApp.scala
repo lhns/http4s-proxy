@@ -1,8 +1,12 @@
 package de.lhns.http4s.proxy
 
 import cats.data.Kleisli
+// NB: cats.effect.kernel.syntax, not cats.effect.syntax -- the latter lives in the cats-effect
+// core artifact, i.e. the IO runtime, which a library at F[_] must not put on its consumers.
+import cats.effect.kernel.syntax.all._
+import cats.effect.kernel.{Async, Resource, Temporal}
 import cats.effect.std.Supervisor
-import cats.effect.{IO, Resource}
+import cats.syntax.all._
 import fs2.{Pipe, Pull, Stream}
 import org.http4s.client.Client
 import org.http4s.{HttpApp, Response}
@@ -39,14 +43,14 @@ object ProxyApp {
   /** Fails the stream if no chunk arrives within `duration` of the previous one. Unlike
     * `Stream#timeout`, a stream that keeps making progress may run for as long as it likes.
     */
-  private def idleTimeout[A](duration: FiniteDuration): Pipe[IO, A, A] =
+  private def idleTimeout[F[_]: Temporal, A](duration: FiniteDuration): Pipe[F, A, A] =
     _.pull
       .timed { timedPull =>
-        def go(current: Pull.Timed[IO, A]): Pull[IO, A, Unit] =
+        def go(current: Pull.Timed[F, A]): Pull[F, A, Unit] =
           current.timeout(duration) >> current.uncons.flatMap {
             case Some((Right(chunk), next)) => Pull.output(chunk) >> go(next)
             case Some((Left(_), _)) =>
-              Pull.raiseError[IO](new TimeoutException(s"upstream body stalled for $duration"))
+              Pull.raiseError[F](new TimeoutException(s"upstream body stalled for $duration"))
             case None => Pull.done
           }
 
@@ -54,18 +58,18 @@ object ProxyApp {
       }
       .stream
 
-  def apply(
-             client: Client[IO],
-             headerTimeout: FiniteDuration,
-             bodyIdleTimeout: FiniteDuration
-           ): Resource[IO, HttpApp[IO]] =
-    Supervisor[IO].map { supervisor =>
+  def apply[F[_]](
+                   client: Client[F],
+                   headerTimeout: FiniteDuration,
+                   bodyIdleTimeout: FiniteDuration
+                 )(implicit F: Async[F]): Resource[F, HttpApp[F]] =
+    Supervisor[F].map { supervisor =>
       Kleisli { request =>
         for {
-          published <- IO.deferred[Either[Throwable, Response[IO]]]
-          pulled <- IO.deferred[Unit]
-          abandoned <- IO.deferred[Unit]
-          done <- IO.deferred[Unit]
+          published <- F.deferred[Either[Throwable, Response[F]]]
+          pulled <- F.deferred[Unit]
+          abandoned <- F.deferred[Unit]
+          done <- F.deferred[Unit]
           fiber <- supervisor.supervise(
             client
               .run(request)
@@ -74,7 +78,7 @@ object ProxyApp {
                   // hold the exchange open only while the body is actually in flight
                   pulled.get.timeoutTo(
                     bodyIdleTimeout,
-                    abandoned.complete(()) *> IO.raiseError(Unconsumed)
+                    abandoned.complete(()) *> F.raiseError[Unit](Unconsumed)
                   ) *>
                   done.get
               }
@@ -88,9 +92,11 @@ object ProxyApp {
           response <- published.get.rethrow
             .timeoutTo(
               headerTimeout,
-              IO.raiseError(new TimeoutException(s"no response headers from upstream within $headerTimeout"))
+              F.raiseError[Response[F]](
+                new TimeoutException(s"no response headers from upstream within $headerTimeout")
+              )
             )
-            .onError(_ => prune)
+            .onError { case _ => prune }
             .onCancel(prune)
         } yield response.withBodyStream(
           (Stream.exec(pulled.complete(()).void) ++ response.body)
