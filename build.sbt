@@ -22,8 +22,8 @@ val V = new {
   val http4s = "0.23.27"
   val http4sJdkHttpClient = "0.10.0"
   val http4sTest = "0.23.36"
-  val logbackClassic = "1.5.21"
-  val munit = "1.2.4"
+  val logbackClassic = "1.6.3"
+  val munit = "1.3.5"
   val munitCatsEffect = "2.2.0"
 }
 
