@@ -12,12 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4.2.1
+      - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
           cache: 'sbt'
           gpg-private-key: ${{ secrets.PGP_PRIVATE_KEY }}
+
+      - uses: sbt/setup-sbt@v1
+
+      # The publish runs the tests first, and the Scala.js rows need Node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Publish
         env:
