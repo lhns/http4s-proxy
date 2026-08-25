@@ -1,4 +1,4 @@
-lazy val scalaVersions = Seq("3.3.3", "2.13.12", "2.12.18")
+lazy val scalaVersions = Seq("3.3.8", "2.13.18")
 
 ThisBuild / scalaVersion := scalaVersions.head
 ThisBuild / versionScheme := Some("early-semver")
@@ -6,11 +6,13 @@ ThisBuild / organization := "de.lhns"
 name := (core.projectRefs.head / name).value
 
 val V = new {
-  val betterMonadicFor = "0.3.1"
+  // The compile-scope http4s version is the *floor* this library supports, deliberately kept low:
+  // declaring a newer one would drag every consumer forward, and cats-effect / http4s are backward
+  // but not forward binary compatible. Tests resolve newer versions through their own dependencies.
   val http4s = "0.23.27"
-  val logbackClassic = "1.4.13"
-  val munit = "0.7.29"
-  val munitTaglessFinal = "0.2.0"
+  val logbackClassic = "1.5.21"
+  val munit = "1.2.4"
+  val munitCatsEffect = "2.2.0"
 }
 
 lazy val commonSettings: SettingsDefinition = Def.settings(
@@ -34,17 +36,11 @@ lazy val commonSettings: SettingsDefinition = Def.settings(
   ),
 
   libraryDependencies ++= Seq(
-    "ch.qos.logback" % "logback-classic" % V.logbackClassic % Test,
-    "de.lolhens" %%% "munit-tagless-final" % V.munitTaglessFinal % Test,
     "org.scalameta" %%% "munit" % V.munit % Test,
+    "org.typelevel" %%% "munit-cats-effect" % V.munitCatsEffect % Test,
   ),
 
   testFrameworks += new TestFramework("munit.Framework"),
-
-  libraryDependencies ++= virtualAxes.?.value.getOrElse(Seq.empty).collectFirst {
-    case VirtualAxis.ScalaVersionAxis(version, _) if version.startsWith("2.") =>
-      compilerPlugin("com.olegpy" %% "better-monadic-for" % V.betterMonadicFor)
-  },
 
   Compile / doc / sources := Seq.empty,
 

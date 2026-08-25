@@ -207,3 +207,8 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+
+### sbt-projectmatrix ###
+## projectmatrix writes resolved row mappings into the repo root
+.sbt/
