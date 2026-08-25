@@ -289,6 +289,29 @@ class ProxyAppSuite extends CatsEffectSuite {
     }
   }
 
+  test("a reader that claims the body just before the deadline is not cut off") {
+    // The boundary either side of which the exchange is reclaimed. Claiming at the last moment
+    // must give a complete body, and must not start a read that the fiber then reclaims from
+    // underneath -- the failure this pairs with is "reading after reclamation", above.
+    run {
+      Ref[IO].of(0).flatMap { releases =>
+        val slow = Stream.emits(payload.getBytes("UTF-8")).covary[IO].metered[IO](1.second)
+        withApp(probeClient(releases, body = slow)) { app =>
+          for {
+            response <- app(req)
+            _ <- IO.sleep(bodyIdleTimeout - 1.second) // claim only just in time
+            body <- response.bodyText.compile.string
+            _ <- IO.sleep(1.second)
+            n <- releases.get
+          } yield (body, n)
+        }
+      }
+    }.map { case (body, n) =>
+      assertEquals(body, payload, "a body claimed before the deadline must not be truncated")
+      assertEquals(n, 1)
+    }
+  }
+
   test("status and headers pass through unchanged") {
     // ProxyApp only rewrites the body; everything else about the upstream response is the
     // proxy's whole job and nothing else asserted it.
