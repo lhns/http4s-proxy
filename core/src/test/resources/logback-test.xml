@@ -1,0 +1,13 @@
+<configuration>
+    <!-- The integration suite stands up a couple of Ember servers per test; at INFO each one
+         announces its bound address, which buries the actual test output. -->
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="WARN">
+        <appender-ref ref="STDOUT"/>
+    </root>
+</configuration>

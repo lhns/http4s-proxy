@@ -10,17 +10,32 @@ on:
 
 jobs:
   test:
-
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # JdkHttpClient's connection pooling and HTTP/2 negotiation are JDK-sensitive, and the
+        # integration suite asserts on HEAD, 304 and Content-Length framing.
+        java: [ '17', '21' ]
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4.2.1
+      - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: ${{ matrix.java }}
           cache: 'sbt'
 
+      - uses: sbt/setup-sbt@v1
+
+      # The Scala.js rows run their tests under Node.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Not "+ test": under projectmatrix every row is its own project whose crossScalaVersions
+      # is just its own, so + cross-builds nothing.
       - name: Run tests
-        run: sbt "+ test"
+        run: sbt test

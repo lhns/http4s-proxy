@@ -1,27 +1,42 @@
-lazy val scalaVersions = Seq("3.3.3", "2.13.12", "2.12.18")
+lazy val scalaVersions = Seq("3.3.8", "2.13.18")
 
 ThisBuild / scalaVersion := scalaVersions.head
 ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / organization := "de.lhns"
+// Test / parallelExecution only serializes within a project, but sbt runs the test task of
+// each matrix row concurrently. The integration suite stands up real servers on real ports
+// and makes timing assertions, so two rows racing each other is enough to fail it.
+Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
+// Without this the sonatype staging bundle is written under the default 0.1.0-SNAPSHOT
+// rather than the release version. Both fs2-compress and doobie-flyway carry it.
+ThisBuild / version := (core.projectRefs.head / version).value
 name := (core.projectRefs.head / name).value
 
 val V = new {
-  val betterMonadicFor = "0.3.1"
+  // The compile-scope http4s version is the *floor* this library supports, deliberately kept low:
+  // declaring a newer one would drag every consumer forward, and cats-effect / http4s are backward
+  // but not forward binary compatible. Tests resolve newer versions through their own dependencies.
+  // Floors implied by http4s 0.23.27, which brings cats-effect-std 3.5.4 and fs2-core 3.10.2.
+  val catsEffect = "3.5.4"
+  val fs2 = "3.10.2"
   val http4s = "0.23.27"
-  val logbackClassic = "1.4.13"
-  val munit = "0.7.29"
-  val munitTaglessFinal = "0.2.0"
+  val http4sJdkHttpClient = "0.10.0"
+  val http4sTest = "0.23.36"
+  val logbackClassic = "1.5.21"
+  val munit = "1.2.4"
+  val munitCatsEffect = "2.2.0"
 }
 
 lazy val commonSettings: SettingsDefinition = Def.settings(
   version := {
     val Tag = "refs/tags/v?([0-9]+(?:\\.[0-9]+)+(?:[+-].*)?)".r
-    sys.env.get("CI_VERSION").collect { case Tag(tag) => tag }
+    sys.env
+      .get("CI_VERSION")
+      .collect { case Tag(tag) => tag }
       .getOrElse("0.0.1-SNAPSHOT")
   },
-
+  description := "Utilities to create proxies in http4s",
   licenses += ("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0")),
-
   homepage := scmInfo.value.map(_.browseUrl),
   scmInfo := Some(
     ScmInfo(
@@ -30,35 +45,26 @@ lazy val commonSettings: SettingsDefinition = Def.settings(
     )
   ),
   developers := List(
-    Developer(id = "lhns", name = "Pierre Kisters", email = "pierrekisters@gmail.com", url = url("https://github.com/lhns/"))
+    Developer(
+      id = "lhns",
+      name = "Pierre Kisters",
+      email = "pierrekisters@gmail.com",
+      url = url("https://github.com/lhns/")
+    )
   ),
-
   libraryDependencies ++= Seq(
-    "ch.qos.logback" % "logback-classic" % V.logbackClassic % Test,
-    "de.lolhens" %%% "munit-tagless-final" % V.munitTaglessFinal % Test,
     "org.scalameta" %%% "munit" % V.munit % Test,
+    "org.typelevel" %%% "munit-cats-effect" % V.munitCatsEffect % Test,
+    // The IO runtime is a test-only dependency: the library itself compiles against
+    // cats-effect-kernel and -std so that it never forces a runtime on consumers.
+    "org.typelevel" %%% "cats-effect" % V.catsEffect % Test,
+    "org.typelevel" %%% "cats-effect-testkit" % V.catsEffect % Test
   ),
-
   testFrameworks += new TestFramework("munit.Framework"),
-
-  libraryDependencies ++= virtualAxes.?.value.getOrElse(Seq.empty).collectFirst {
-    case VirtualAxis.ScalaVersionAxis(version, _) if version.startsWith("2.") =>
-      compilerPlugin("com.olegpy" %% "better-monadic-for" % V.betterMonadicFor)
-  },
-
   Compile / doc / sources := Seq.empty,
-
   publishMavenStyle := true,
-
   publishTo := sonatypePublishToBundle.value,
-
-  sonatypeCredentialHost := {
-    if (sonatypeProfileName.value == "de.lolhens")
-      "oss.sonatype.org"
-    else
-      "s01.oss.sonatype.org"
-  },
-
+  sonatypeCredentialHost := Sonatype.sonatypeCentralHost,
   credentials ++= (for {
     username <- sys.env.get("SONATYPE_USERNAME")
     password <- sys.env.get("SONATYPE_PASSWORD")
@@ -67,18 +73,7 @@ lazy val commonSettings: SettingsDefinition = Def.settings(
     sonatypeCredentialHost.value,
     username,
     password
-  )).toList,
-
-  pomExtra := {
-    if (sonatypeProfileName.value == "de.lolhens")
-      <distributionManagement>
-        <relocation>
-          <groupId>de.lhns</groupId>
-        </relocation>
-      </distributionManagement>
-    else
-      pomExtra.value
-  }
+  )).toList
 )
 
 lazy val root: Project =
@@ -91,14 +86,43 @@ lazy val root: Project =
     )
     .aggregate(core.projectRefs: _*)
 
-lazy val core = projectMatrix.in(file("core"))
+lazy val core = projectMatrix
+  .in(file("core"))
   .settings(commonSettings)
   .settings(
     name := "http4s-proxy",
-
     libraryDependencies ++= Seq(
-      "org.http4s" %% "http4s-core" % V.http4s,
-    ),
+      // %%% not %%: with %% the Scala.js rows resolved the JVM artifact, which compiles but
+      // cannot link, so every published _sjs1 artifact up to 0.4.1 was unusable. There were no
+      // tests to catch it.
+      "org.http4s" %%% "http4s-core" % V.http4s,
+      "org.http4s" %%% "http4s-client" % V.http4s,
+      // kernel + std, never cats-effect core: this library is effect-polymorphic and must not
+      // force the IO runtime on consumers.
+      "org.typelevel" %%% "cats-effect-kernel" % V.catsEffect,
+      "org.typelevel" %%% "cats-effect-std" % V.catsEffect,
+      "co.fs2" %%% "fs2-core" % V.fs2
+    )
   )
-  .jvmPlatform(scalaVersions)
-  .jsPlatform(scalaVersions)
+  // http4s-jdk-http-client is JVM only, so the integration tests that use it live in
+  // src/test/scalajvm and their dependencies belong to the JVM rows alone. Those tests
+  // stand up real servers and make timing assertions, so they neither fork-share a JVM
+  // with the build nor run in parallel with each other.
+  .jvmPlatform(
+    scalaVersions,
+    Seq(
+      libraryDependencies ++= Seq(
+        "ch.qos.logback" % "logback-classic" % V.logbackClassic % Test,
+        "org.http4s" %% "http4s-dsl" % V.http4sTest % Test,
+        "org.http4s" %% "http4s-ember-server" % V.http4sTest % Test,
+        "org.http4s" %% "http4s-jdk-http-client" % V.http4sJdkHttpClient % Test
+      ),
+      Test / fork := true,
+      Test / parallelExecution := false
+    )
+  )
+  // Scala.js tests run under Node, which needs CommonJS modules.
+  .jsPlatform(
+    scalaVersions,
+    Seq(Test / scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule)))
+  )
