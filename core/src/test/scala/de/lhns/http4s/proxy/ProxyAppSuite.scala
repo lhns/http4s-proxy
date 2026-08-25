@@ -185,7 +185,10 @@ class ProxyAppSuite extends CatsEffectSuite {
         }
       }
     }.map { outcome =>
-      assert(outcome.isLeft, s"a reclaimed body must not read as a successful empty response: $outcome")
+      assert(
+        outcome.swap.exists(_.isInstanceOf[ProxyApp.ReclaimedException]),
+        s"a reclaimed body must fail with ReclaimedException, not read as an empty response: $outcome"
+      )
     }
   }
 
