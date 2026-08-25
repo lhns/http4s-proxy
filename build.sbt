@@ -30,14 +30,13 @@ val V = new {
 lazy val commonSettings: SettingsDefinition = Def.settings(
   version := {
     val Tag = "refs/tags/v?([0-9]+(?:\\.[0-9]+)+(?:[+-].*)?)".r
-    sys.env.get("CI_VERSION").collect { case Tag(tag) => tag }
+    sys.env
+      .get("CI_VERSION")
+      .collect { case Tag(tag) => tag }
       .getOrElse("0.0.1-SNAPSHOT")
   },
-
   description := "Utilities to create proxies in http4s",
-
   licenses += ("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0")),
-
   homepage := scmInfo.value.map(_.browseUrl),
   scmInfo := Some(
     ScmInfo(
@@ -46,29 +45,26 @@ lazy val commonSettings: SettingsDefinition = Def.settings(
     )
   ),
   developers := List(
-    Developer(id = "lhns", name = "Pierre Kisters", email = "pierrekisters@gmail.com", url = url("https://github.com/lhns/"))
+    Developer(
+      id = "lhns",
+      name = "Pierre Kisters",
+      email = "pierrekisters@gmail.com",
+      url = url("https://github.com/lhns/")
+    )
   ),
-
   libraryDependencies ++= Seq(
     "org.scalameta" %%% "munit" % V.munit % Test,
     "org.typelevel" %%% "munit-cats-effect" % V.munitCatsEffect % Test,
     // The IO runtime is a test-only dependency: the library itself compiles against
     // cats-effect-kernel and -std so that it never forces a runtime on consumers.
     "org.typelevel" %%% "cats-effect" % V.catsEffect % Test,
-    "org.typelevel" %%% "cats-effect-testkit" % V.catsEffect % Test,
+    "org.typelevel" %%% "cats-effect-testkit" % V.catsEffect % Test
   ),
-
-
   testFrameworks += new TestFramework("munit.Framework"),
-
   Compile / doc / sources := Seq.empty,
-
   publishMavenStyle := true,
-
   publishTo := sonatypePublishToBundle.value,
-
   sonatypeCredentialHost := Sonatype.sonatypeCentralHost,
-
   credentials ++= (for {
     username <- sys.env.get("SONATYPE_USERNAME")
     password <- sys.env.get("SONATYPE_PASSWORD")
@@ -90,11 +86,11 @@ lazy val root: Project =
     )
     .aggregate(core.projectRefs: _*)
 
-lazy val core = projectMatrix.in(file("core"))
+lazy val core = projectMatrix
+  .in(file("core"))
   .settings(commonSettings)
   .settings(
     name := "http4s-proxy",
-
     libraryDependencies ++= Seq(
       // %%% not %%: with %% the Scala.js rows resolved the JVM artifact, which compiles but
       // cannot link, so every published _sjs1 artifact up to 0.4.1 was unusable. There were no
@@ -105,8 +101,8 @@ lazy val core = projectMatrix.in(file("core"))
       // force the IO runtime on consumers.
       "org.typelevel" %%% "cats-effect-kernel" % V.catsEffect,
       "org.typelevel" %%% "cats-effect-std" % V.catsEffect,
-      "co.fs2" %%% "fs2-core" % V.fs2,
-    ),
+      "co.fs2" %%% "fs2-core" % V.fs2
+    )
   )
   // http4s-jdk-http-client is JVM only, so the integration tests that use it live in
   // src/test/scalajvm and their dependencies belong to the JVM rows alone. Those tests

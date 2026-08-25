@@ -15,9 +15,10 @@ import org.http4s.{HttpApp, Method, Request, Response, Status, Uri}
 
 import scala.concurrent.duration._
 
-/** Exercises ProxyApp against a real JdkHttpClient talking to a real Ember server, so that the
-  * body-stream rewiring is validated against actual reactive-streams plumbing rather than a stub.
-  */
+/**
+ * Exercises ProxyApp against a real JdkHttpClient talking to a real Ember server, so that the
+ * body-stream rewiring is validated against actual reactive-streams plumbing rather than a stub.
+ */
 class ProxyAppIntegrationSuite extends FunSuite {
   override val munitTimeout: FiniteDuration = 180.seconds
 
@@ -141,11 +142,11 @@ class ProxyAppIntegrationSuite extends FunSuite {
 
   /** The real production shape: browser -> Ember gateway -> ProxyApp -> JdkHttpClient -> backend. */
   private def endToEnd[A](
-                          bodyIdleTimeout: FiniteDuration,
-                          headerTimeout: FiniteDuration = 10.seconds,
-                          maxConnections: Int = 1024,
-                          gatewayIdleTimeout: FiniteDuration = 60.seconds
-                        )(f: (Client[IO], Uri, Ref[IO, Int]) => IO[A]): A =
+      bodyIdleTimeout: FiniteDuration,
+      headerTimeout: FiniteDuration = 10.seconds,
+      maxConnections: Int = 1024,
+      gatewayIdleTimeout: FiniteDuration = 60.seconds
+  )(f: (Client[IO], Uri, Ref[IO, Int]) => IO[A]): A =
     (for {
       backendUri <- backend
       upstream <- JdkHttpClient.simple[IO]
@@ -236,12 +237,11 @@ class ProxyAppIntegrationSuite extends FunSuite {
       // be served no matter how quickly the handlers finish -- which would make this a test of
       // keep-alive rather than of ProxyApp.
       gatewayIdleTimeout = 1.second
-    ) {
-      (browser, gateway, _) =>
-        List
-          .range(0, 40)
-          .parTraverse(_ => browser.expect[String](gateway / "hang").attempt)
-          .timeout(60.seconds)
+    ) { (browser, gateway, _) =>
+      List
+        .range(0, 40)
+        .parTraverse(_ => browser.expect[String](gateway / "hang").attempt)
+        .timeout(60.seconds)
     }
     assertEquals(outcomes.length, 40)
     assert(outcomes.forall(_.isLeft), "a request to a hanging upstream must fail, not hang")
@@ -260,7 +260,9 @@ class ProxyAppIntegrationSuite extends FunSuite {
 
   test("20 concurrent 1MB binary payloads are each byte-exact (no cross-talk between exchanges)") {
     val corrupted = endToEnd(20.seconds) { (browser, gateway, _) =>
-      List.range(0, 20).parTraverse(_ => bytesOf(browser, gateway / "binary"))
+      List
+        .range(0, 20)
+        .parTraverse(_ => bytesOf(browser, gateway / "binary"))
         .map(_.count(received => !java.util.Arrays.equals(received, binary)))
     }
     assertEquals(corrupted, 0, "concurrent exchanges corrupted each other's bodies")
@@ -304,9 +306,12 @@ class ProxyAppIntegrationSuite extends FunSuite {
 
   test("a 304 carrying a Content-Length does not hang the downstream client") {
     val (status, body) = endToEnd(20.seconds) { (browser, gateway, _) =>
-      browser.run(Request[IO](Method.GET, gateway / "notModified")).use { response =>
-        response.body.compile.to(Array).attempt.map(b => (response.status, b.map(_.length)))
-      }.timeout(30.seconds)
+      browser
+        .run(Request[IO](Method.GET, gateway / "notModified"))
+        .use { response =>
+          response.body.compile.to(Array).attempt.map(b => (response.status, b.map(_.length)))
+        }
+        .timeout(30.seconds)
     }
     assertEquals(status, Status.NotModified)
     assertEquals(body, Right(0), "a 304 must yield an empty body, not a stalled read")
@@ -314,9 +319,12 @@ class ProxyAppIntegrationSuite extends FunSuite {
 
   test("a HEAD response with a Content-Length does not hang the downstream client") {
     val (status, body) = endToEnd(20.seconds) { (browser, gateway, _) =>
-      browser.run(Request[IO](Method.HEAD, gateway / "small")).use { response =>
-        response.body.compile.to(Array).attempt.map(b => (response.status, b.map(_.length)))
-      }.timeout(30.seconds)
+      browser
+        .run(Request[IO](Method.HEAD, gateway / "small"))
+        .use { response =>
+          response.body.compile.to(Array).attempt.map(b => (response.status, b.map(_.length)))
+        }
+        .timeout(30.seconds)
     }
     assertEquals(status, Status.Ok)
     assertEquals(body, Right(0), "a HEAD response must yield an empty body, not a stalled read")

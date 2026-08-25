@@ -15,51 +15,57 @@ import java.util.concurrent.TimeoutException
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NoStackTrace
 
-/** Like `Client#toHttpApp`, but the upstream connection is guaranteed to be released even if the
-  * response body is never consumed, and both the header phase and the body phase are bounded.
-  *
-  * The upstream exchange is owned by a supervised fiber which holds it open inside `Resource#use`
-  * for exactly as long as the response body is in flight. `use` releases on completion, error and
-  * cancelation alike, so there is no path on which the connection is retained.
-  *
-  * `bodyIdleTimeout` bounds *lack of progress*, not total duration: a large body streaming to a
-  * slow downstream client is fine, a body that stalls is not. Never being read at all is just the
-  * first special case of no progress, which is why one setting covers both -- it is enforced by the
-  * fiber before the first pull, and by the stream itself between chunks.
-  *
-  * That fiber necessarily outlives the request: this returns as soon as the response headers are
-  * in, while the body is streamed afterwards by whoever consumes the response. The supervisor must
-  * therefore live as long as the application, which is why this is a `Resource` -- closing it
-  * cancels in-flight exchanges, so it must not be closed per request.
-  */
+/**
+ * Like `Client#toHttpApp`, but the upstream connection is guaranteed to be released even if the
+ * response body is never consumed, and both the header phase and the body phase are bounded.
+ *
+ * The upstream exchange is owned by a supervised fiber which holds it open inside `Resource#use`
+ * for exactly as long as the response body is in flight. `use` releases on completion, error and
+ * cancelation alike, so there is no path on which the connection is retained.
+ *
+ * `bodyIdleTimeout` bounds *lack of progress*, not total duration: a large body streaming to a
+ * slow downstream client is fine, a body that stalls is not. Never being read at all is just the
+ * first special case of no progress, which is why one setting covers both -- it is enforced by the
+ * fiber before the first pull, and by the stream itself between chunks.
+ *
+ * That fiber necessarily outlives the request: this returns as soon as the response headers are
+ * in, while the body is streamed afterwards by whoever consumes the response. The supervisor must
+ * therefore live as long as the application, which is why this is a `Resource` -- closing it
+ * cancels in-flight exchanges, so it must not be closed per request.
+ */
 object ProxyApp {
-  /** Internal control-flow signal: the exchange gave up waiting to be read and is unwinding its
-    * `use` block. It never reaches a caller -- by the time it is raised the response has already
-    * been published -- so it carries no stack trace.
-    */
+
+  /**
+   * Internal control-flow signal: the exchange gave up waiting to be read and is unwinding its
+   * `use` block. It never reaches a caller -- by the time it is raised the response has already
+   * been published -- so it carries no stack trace.
+   */
   private object Unconsumed extends Exception("response body was never consumed") with NoStackTrace
 
-  /** Raised to whoever pulls a response body after its exchange has already been reclaimed.
-    *
-    * Releasing an upstream exchange cancels its body publisher, so without this a late reader
-    * would observe a silently truncated -- typically empty -- body. Corruption is worse than the
-    * leak this guards against, so the read fails instead.
-    */
+  /**
+   * Raised to whoever pulls a response body after its exchange has already been reclaimed.
+   *
+   * Releasing an upstream exchange cancels its body publisher, so without this a late reader
+   * would observe a silently truncated -- typically empty -- body. Corruption is worse than the
+   * leak this guards against, so the read fails instead.
+   */
   final class ReclaimedException private[proxy] (message: String) extends IllegalStateException(message)
 
-  /** Who owns the response body. The reader and the supervising fiber both try to claim it, and
-    * exactly one wins: a `Ref` decides atomically, because racing two signals against each other
-    * leaves a window in which the fiber releases the exchange just as the reader starts reading,
-    * which is silent truncation.
-    */
+  /**
+   * Who owns the response body. The reader and the supervising fiber both try to claim it, and
+   * exactly one wins: a `Ref` decides atomically, because racing two signals against each other
+   * leaves a window in which the fiber releases the exchange just as the reader starts reading,
+   * which is silent truncation.
+   */
   private sealed trait Phase
   private case object Unclaimed extends Phase
   private case object Reading extends Phase
   private case object Abandoned extends Phase
 
-  /** Fails the stream if no chunk arrives within `duration` of the previous one. Unlike
-    * `Stream#timeout`, a stream that keeps making progress may run for as long as it likes.
-    */
+  /**
+   * Fails the stream if no chunk arrives within `duration` of the previous one. Unlike
+   * `Stream#timeout`, a stream that keeps making progress may run for as long as it likes.
+   */
   private def idleTimeout[F[_]: Temporal, A](duration: FiniteDuration): Pipe[F, A, A] =
     _.pull
       .timed { timedPull =>
@@ -75,27 +81,29 @@ object ProxyApp {
       }
       .stream
 
-  /** Allocates a `Supervisor` to own the in-flight exchanges. **Allocate this once, at
-    * application scope.** Closing the returned `Resource` cancels every exchange still in
-    * flight, so using it per request truncates responses under load; if you already have a
-    * supervisor of the right lifetime, use [[withSupervisor]] instead.
-    */
+  /**
+   * Allocates a `Supervisor` to own the in-flight exchanges. **Allocate this once, at
+   * application scope.** Closing the returned `Resource` cancels every exchange still in
+   * flight, so using it per request truncates responses under load; if you already have a
+   * supervisor of the right lifetime, use [[withSupervisor]] instead.
+   */
   def apply[F[_]](
-                   client: Client[F],
-                   headerTimeout: FiniteDuration,
-                   bodyIdleTimeout: FiniteDuration
-                 )(implicit F: Async[F]): Resource[F, HttpApp[F]] =
+      client: Client[F],
+      headerTimeout: FiniteDuration,
+      bodyIdleTimeout: FiniteDuration
+  )(implicit F: Async[F]): Resource[F, HttpApp[F]] =
     Supervisor[F].map(withSupervisor(client, _, headerTimeout, bodyIdleTimeout))
 
-  /** As [[apply]], but with the ownership of the in-flight exchanges made explicit: they are
-    * supervised by `supervisor`, and are cancelled when it is closed.
-    */
+  /**
+   * As [[apply]], but with the ownership of the in-flight exchanges made explicit: they are
+   * supervised by `supervisor`, and are cancelled when it is closed.
+   */
   def withSupervisor[F[_]](
-                            client: Client[F],
-                            supervisor: Supervisor[F],
-                            headerTimeout: FiniteDuration,
-                            bodyIdleTimeout: FiniteDuration
-                          )(implicit F: Async[F]): HttpApp[F] =
+      client: Client[F],
+      supervisor: Supervisor[F],
+      headerTimeout: FiniteDuration,
+      bodyIdleTimeout: FiniteDuration
+  )(implicit F: Async[F]): HttpApp[F] =
     Kleisli { request =>
       for {
         published <- F.deferred[Either[Throwable, Response[F]]]

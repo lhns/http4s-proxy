@@ -11,10 +11,11 @@ import org.http4s.{HttpApp, Uri}
 
 import scala.concurrent.duration._
 
-/** Canary for the JVM-only test row: proves that src/test/scalajvm is compiled, that the
-  * JVM-only dependencies resolve, and that a real Ember server and JdkHttpClient can talk
-  * to each other here. The Scala.js rows must never see this file.
-  */
+/**
+ * Canary for the JVM-only test row: proves that src/test/scalajvm is compiled, that the
+ * JVM-only dependencies resolve, and that a real Ember server and JdkHttpClient can talk
+ * to each other here. The Scala.js rows must never see this file.
+ */
 class EmberCanarySuite extends FunSuite {
   test("a real Ember server and JdkHttpClient round-trip on the JVM row") {
     val body = (for {

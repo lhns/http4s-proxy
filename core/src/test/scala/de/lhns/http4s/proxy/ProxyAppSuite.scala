@@ -23,11 +23,11 @@ class ProxyAppSuite extends CatsEffectSuite {
 
   /** A client whose release is observable and whose timing is fully controlled. */
   private def probeClient(
-                           releases: Ref[IO, Int],
-                           acquireDelay: FiniteDuration = Duration.Zero,
-                           body: Stream[IO, Byte] = payloadStream,
-                           acquireFailure: Option[Throwable] = None
-                         ): Client[IO] =
+      releases: Ref[IO, Int],
+      acquireDelay: FiniteDuration = Duration.Zero,
+      body: Stream[IO, Byte] = payloadStream,
+      acquireFailure: Option[Throwable] = None
+  ): Client[IO] =
     Client[IO] { _ =>
       Resource.make(
         IO.sleep(acquireDelay) *>
@@ -35,11 +35,12 @@ class ProxyAppSuite extends CatsEffectSuite {
       )(_ => releases.update(_ + 1))
     }
 
-  /** Runs under virtual time; fails the test if the program cannot make progress.
-    *
-    * Returns IO rather than unsafeRunSync-ing: the latter is JVM only, since Scala.js cannot
-    * block a thread. TestControl itself is a pure simulation and runs identically on both.
-    */
+  /**
+   * Runs under virtual time; fails the test if the program cannot make progress.
+   *
+   * Returns IO rather than unsafeRunSync-ing: the latter is JVM only, since Scala.js cannot
+   * block a thread. TestControl itself is a pure simulation and runs identically on both.
+   */
   private def run[A](io: IO[A]): IO[A] = TestControl.executeEmbed(io)
 
   private def withApp[A](client: Client[IO])(f: org.http4s.HttpApp[IO] => IO[A]): IO[A] =
