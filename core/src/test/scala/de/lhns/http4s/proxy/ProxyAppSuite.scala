@@ -1,5 +1,6 @@
 package de.lhns.http4s.proxy
 
+import cats.effect.std.Supervisor
 import cats.effect.testkit.TestControl
 import cats.syntax.all._
 import cats.effect.{IO, Ref, Resource}
@@ -7,6 +8,7 @@ import fs2.Stream
 import munit.CatsEffectSuite
 import org.http4s.client.Client
 import org.http4s.{Method, Request, Response, Status, Uri}
+import org.typelevel.ci.CIString
 
 import java.util.concurrent.TimeoutException
 import scala.concurrent.duration._
@@ -285,6 +287,68 @@ class ProxyAppSuite extends CatsEffectSuite {
       assertEquals(before, 0)
       assertEquals(after, 100, "every abandoned exchange must be reclaimed")
     }
+  }
+
+  test("status and headers pass through unchanged") {
+    // ProxyApp only rewrites the body; everything else about the upstream response is the
+    // proxy's whole job and nothing else asserted it.
+    run {
+      Ref[IO].of(0).flatMap { releases =>
+        val client = Client[IO] { _ =>
+          Resource.make(
+            IO.pure(
+              Response[IO](Status.Created)
+                .withBodyStream(payloadStream)
+                .putHeaders("X-Upstream" -> "yes")
+            )
+          )(_ => releases.update(_ + 1))
+        }
+        withApp(client) { app =>
+          app(req).flatMap { response =>
+            response.bodyText.compile.string.map { body =>
+              (response.status, response.headers.get(CIString("X-Upstream")).map(_.head.value), body)
+            }
+          }
+        }
+      }
+    }.map { case (status, upstreamHeader, body) =>
+      assertEquals(status, Status.Created)
+      assertEquals(upstreamHeader, Some("yes"))
+      assertEquals(body, payload)
+    }
+  }
+
+  test("withSupervisor uses the supervisor it is given") {
+    run {
+      Ref[IO].of(0).flatMap { releases =>
+        Supervisor[IO].use { supervisor =>
+          val app = ProxyApp.withSupervisor(probeClient(releases), supervisor, headerTimeout, bodyIdleTimeout)
+          for {
+            body <- app(req).flatMap(_.bodyText.compile.string)
+            _ <- IO.sleep(1.second)
+            n <- releases.get
+          } yield (body, n)
+        }
+      }
+    }.map { case (body, n) =>
+      assertEquals(body, payload)
+      assertEquals(n, 1)
+    }
+  }
+
+  test("closing the supervisor releases exchanges that are still in flight") {
+    // The documented shutdown behaviour, and the reason apply returns a Resource: an exchange
+    // whose body nobody ever read must not survive its supervisor.
+    run {
+      Ref[IO].of(0).flatMap { releases =>
+        Supervisor[IO]
+          .use { supervisor =>
+            val app = ProxyApp.withSupervisor(probeClient(releases), supervisor, headerTimeout, bodyIdleTimeout)
+            app(req).void // body deliberately never read, so the exchange is still in flight
+          }
+          .flatMap(_ => releases.get)
+      }
+    }.map(n => assertEquals(n, 1, "closing the supervisor must not leak an in-flight exchange"))
   }
 
   test("baseline: Client#toHttpApp leaks when the body is never consumed") {

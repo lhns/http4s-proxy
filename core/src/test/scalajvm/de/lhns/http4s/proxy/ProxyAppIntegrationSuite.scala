@@ -191,6 +191,26 @@ class ProxyAppIntegrationSuite extends FunSuite {
     assertEquals(echoed, "payload up")
   }
 
+  test("end to end: a streamed request body is forwarded upstream byte-exactly") {
+    // The POST echo test above sends a small fixed string, which the client can frame with a
+    // Content-Length. A streamed body is chunked, and exercises the request side of the proxy.
+    //
+    // withEntity, not withBodyStream: the latter leaves the request neither chunked nor
+    // Content-Length framed, and JdkHttpClient.convertRequest maps that to BodyPublishers.noBody,
+    // so the body is silently dropped before it ever reaches the proxy.
+    val chunk = binary.take(256 * 1024)
+    val echoed = endToEnd(20.seconds) { (browser, gateway, _) =>
+      browser
+        .run(
+          Request[IO](Method.POST, gateway / "echo")
+            .withEntity(fs2.Stream.emits(chunk).covary[IO].chunkLimit(8192).unchunks)
+        )
+        .use(_.body.compile.to(Array))
+    }
+    assertEquals(echoed.length, chunk.length)
+    assert(java.util.Arrays.equals(echoed, chunk), "streamed request body was corrupted in transit")
+  }
+
   test("end to end: an upstream error status passes through unchanged") {
     val status = endToEnd(5.seconds) { (browser, gateway, _) =>
       browser.status(Request[IO](Method.GET, gateway / "boom"))

@@ -28,10 +28,10 @@ import scala.util.control.NoStackTrace
  * first special case of no progress, which is why one setting covers both -- it is enforced by the
  * fiber before the first pull, and by the stream itself between chunks.
  *
- * That fiber necessarily outlives the request: this returns as soon as the response headers are
- * in, while the body is streamed afterwards by whoever consumes the response. The supervisor must
- * therefore live as long as the application, which is why this is a `Resource` -- closing it
- * cancels in-flight exchanges, so it must not be closed per request.
+ * That fiber necessarily outlives the request: the `HttpApp` returns as soon as the response
+ * headers are in, while the body is streamed afterwards by whoever consumes the response. The
+ * supervisor owning it must therefore live as long as the application, not as long as a request.
+ * [[ProxyApp.apply]] allocates one as a `Resource` for you; [[ProxyApp.withSupervisor]] takes one.
  */
 object ProxyApp {
 
