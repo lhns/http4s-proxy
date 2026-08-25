@@ -1,4 +1,4 @@
-package de.lolhens.http4s.proxy
+package de.lhns.http4s.proxy
 
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global

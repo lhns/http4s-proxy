@@ -1,4 +1,4 @@
-package de.lolhens.http4s.proxy
+package de.lhns.http4s.proxy
 
 import org.http4s.Uri.Authority
 import org.http4s.headers.Host

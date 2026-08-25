@@ -1,6 +1,6 @@
-package de.lolhens.http4s.proxy
+package de.lhns.http4s.proxy
 
-import de.lolhens.http4s.proxy.Http4sProxy._
+import de.lhns.http4s.proxy.Http4sProxy._
 import munit.FunSuite
 import org.http4s.headers.Host
 import org.http4s.{Request, Uri}
