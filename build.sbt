@@ -3,6 +3,10 @@ lazy val scalaVersions = Seq("3.3.8", "2.13.18")
 ThisBuild / scalaVersion := scalaVersions.head
 ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / organization := "de.lhns"
+// Test / parallelExecution only serializes within a project, but sbt runs the test task of
+// each matrix row concurrently. The integration suite stands up real servers on real ports
+// and makes timing assertions, so two rows racing each other is enough to fail it.
+Global / concurrentRestrictions += Tags.limit(Tags.Test, 1)
 // Without this the sonatype staging bundle is written under the default 0.1.0-SNAPSHOT
 // rather than the release version. Both fs2-compress and doobie-flyway carry it.
 ThisBuild / version := (core.projectRefs.head / version).value
@@ -12,7 +16,9 @@ val V = new {
   // The compile-scope http4s version is the *floor* this library supports, deliberately kept low:
   // declaring a newer one would drag every consumer forward, and cats-effect / http4s are backward
   // but not forward binary compatible. Tests resolve newer versions through their own dependencies.
-  val catsEffect = "3.7.1"
+  // Floors implied by http4s 0.23.27, which brings cats-effect-std 3.5.4 and fs2-core 3.10.2.
+  val catsEffect = "3.5.4"
+  val fs2 = "3.10.2"
   val http4s = "0.23.27"
   val http4sJdkHttpClient = "0.10.0"
   val http4sTest = "0.23.36"
@@ -104,6 +110,11 @@ lazy val core = projectMatrix.in(file("core"))
     scalaVersions,
     Seq(
       libraryDependencies ++= Seq(
+        // TEMPORARY: ProxyApp is JVM-only and IO-hardcoded in this commit, so it needs the IO
+        // runtime at compile scope. The next commit generalizes it to F[_] and moves both of
+        // these to the shared, cross-built scope as cats-effect-kernel and -std.
+        "org.typelevel" %% "cats-effect" % V.catsEffect,
+        "org.http4s" %% "http4s-client" % V.http4s,
         "ch.qos.logback" % "logback-classic" % V.logbackClassic % Test,
         "org.http4s" %% "http4s-dsl" % V.http4sTest % Test,
         "org.http4s" %% "http4s-ember-server" % V.http4sTest % Test,
