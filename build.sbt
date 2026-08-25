@@ -3,6 +3,9 @@ lazy val scalaVersions = Seq("3.3.8", "2.13.18")
 ThisBuild / scalaVersion := scalaVersions.head
 ThisBuild / versionScheme := Some("early-semver")
 ThisBuild / organization := "de.lhns"
+// Without this the sonatype staging bundle is written under the default 0.1.0-SNAPSHOT
+// rather than the release version. Both fs2-compress and doobie-flyway carry it.
+ThisBuild / version := (core.projectRefs.head / version).value
 name := (core.projectRefs.head / name).value
 
 val V = new {
@@ -24,6 +27,8 @@ lazy val commonSettings: SettingsDefinition = Def.settings(
     sys.env.get("CI_VERSION").collect { case Tag(tag) => tag }
       .getOrElse("0.0.1-SNAPSHOT")
   },
+
+  description := "Utilities to create proxies in http4s",
 
   licenses += ("Apache-2.0", url("https://www.apache.org/licenses/LICENSE-2.0")),
 
@@ -47,8 +52,6 @@ lazy val commonSettings: SettingsDefinition = Def.settings(
     "org.typelevel" %%% "cats-effect-testkit" % V.catsEffect % Test,
   ),
 
-  // Scala.js tests run under Node, which needs CommonJS modules.
-  Test / scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule)),
 
   testFrameworks += new TestFramework("munit.Framework"),
 
@@ -58,12 +61,7 @@ lazy val commonSettings: SettingsDefinition = Def.settings(
 
   publishTo := sonatypePublishToBundle.value,
 
-  sonatypeCredentialHost := {
-    if (sonatypeProfileName.value == "de.lolhens")
-      "oss.sonatype.org"
-    else
-      "s01.oss.sonatype.org"
-  },
+  sonatypeCredentialHost := Sonatype.sonatypeCentralHost,
 
   credentials ++= (for {
     username <- sys.env.get("SONATYPE_USERNAME")
@@ -73,18 +71,7 @@ lazy val commonSettings: SettingsDefinition = Def.settings(
     sonatypeCredentialHost.value,
     username,
     password
-  )).toList,
-
-  pomExtra := {
-    if (sonatypeProfileName.value == "de.lolhens")
-      <distributionManagement>
-        <relocation>
-          <groupId>de.lhns</groupId>
-        </relocation>
-      </distributionManagement>
-    else
-      pomExtra.value
-  }
+  )).toList
 )
 
 lazy val root: Project =
@@ -126,4 +113,8 @@ lazy val core = projectMatrix.in(file("core"))
       Test / parallelExecution := false
     )
   )
-  .jsPlatform(scalaVersions)
+  // Scala.js tests run under Node, which needs CommonJS modules.
+  .jsPlatform(
+    scalaVersions,
+    Seq(Test / scalaJSLinkerConfig ~= (_.withModuleKind(ModuleKind.CommonJSModule)))
+  )
