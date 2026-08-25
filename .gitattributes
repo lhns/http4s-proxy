@@ -1,0 +1,3 @@
+# Keep line endings LF in the working copy too, not just in the repo. Without this, git checks
+# sources out as CRLF on Windows and scalafmtCheck then reports every file as unformatted.
+* text=auto eol=lf
