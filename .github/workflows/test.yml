@@ -31,7 +31,7 @@ jobs:
       - uses: sbt/setup-sbt@v1
 
       # The Scala.js rows run their tests under Node.
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: '20'
 
