@@ -17,7 +17,7 @@ val V = new {
   // declaring a newer one would drag every consumer forward, and cats-effect / http4s are backward
   // but not forward binary compatible. Tests resolve newer versions through their own dependencies.
   // Floors implied by http4s 0.23.27, which brings cats-effect-std 3.5.4 and fs2-core 3.10.2.
-  val catsEffect = "3.5.4"
+  val catsEffect = "3.5.7"
   val fs2 = "3.10.2"
   val http4s = "0.23.27"
   val http4sJdkHttpClient = "0.10.0"
