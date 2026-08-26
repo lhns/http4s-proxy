@@ -19,7 +19,7 @@ val V = new {
   // Floors implied by http4s 0.23.27, which brings cats-effect-std 3.5.4 and fs2-core 3.10.2.
   val catsEffect = "3.5.4"
   val fs2 = "3.10.2"
-  val http4s = "0.23.27"
+  val http4s = "0.23.36"
   val http4sJdkHttpClient = "0.10.0"
   val http4sTest = "0.23.36"
   val logbackClassic = "1.6.3"
