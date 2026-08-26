@@ -13,13 +13,9 @@ ThisBuild / version := (core.projectRefs.head / version).value
 name := (core.projectRefs.head / name).value
 
 val V = new {
-  // The compile-scope http4s version is the *floor* this library supports, deliberately kept low:
-  // declaring a newer one would drag every consumer forward, and cats-effect / http4s are backward
-  // but not forward binary compatible. Tests resolve newer versions through their own dependencies.
-  // Floors implied by http4s 0.23.27, which brings cats-effect-std 3.5.4 and fs2-core 3.10.2.
-  val catsEffect = "3.5.4"
+  val catsEffect = "3.5.7"
   val fs2 = "3.13.0"
-  val http4s = "0.23.27"
+  val http4s = "0.23.36"
   val http4sJdkHttpClient = "0.10.0"
   val http4sTest = "0.23.36"
   val logbackClassic = "1.6.3"
