@@ -13,7 +13,7 @@ ThisBuild / version := (core.projectRefs.head / version).value
 name := (core.projectRefs.head / name).value
 
 val V = new {
-  val catsEffect = "3.5.7"
+  val catsEffect = "3.7.1"
   val fs2 = "3.13.0"
   val http4s = "0.23.36"
   val http4sJdkHttpClient = "0.10.0"
